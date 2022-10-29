@@ -2,10 +2,19 @@
 	<ion-page>
 		<ion-content :fullscreen="true">
 			<div class="top_section">
-				<div class="buttons" style="position: absolute; right: 0%;" @click="showUserBox = !showUserBox">User</div>
+				<div class="bank_item">
+					<p>Bank</p>
+					<p style="font-size: 1rem;font-weight: 600;">${{numberWithCommas(dataBase.saved)}}</p>
+				</div>
+				<div class="buttons" style="position: absolute; right: 0%;top: 0px;" @click="showUserBox = !showUserBox">User</div>
 			</div>
 			<div class="bottom_section">
+				<div class="buttons" style="position: absolute; right: 0%;top: 0px;" @click="showUserBox = !showUserBox">Add Goal</div>
+				<div>
+					<div v-for="(contents, goalID) of dataBase.goals" :key="goalID">
 
+					</div>
+				</div>
 			</div>
 
 			<div v-if="showUserBox || !userSignIn" class="user_box">
@@ -38,7 +47,7 @@
 				</template>
 				<template v-else>
 					<div class="profile_page">
-						<div class="top_section">
+						<div class="top_section_profile">
 							<div class="class_button" @click="signOutUser()">Sign Out</div>
 							<div>Email: {{userEmail}}</div>
 						</div>
@@ -183,25 +192,31 @@ export default defineComponent({
 			}).catch((error) => {
 				console.log(error)
 			});
-		}
+		},
+		numberWithCommas(num: string | number) {
+			num = `${num}`
+			return ((parseFloat(num).toFixed(2)).replace(/\B(?<!\.\d*)(?=(\d{3})+(?!\d))/g, ","));
+		},
 	},
 });
 </script>
 
 <style scoped>
+p{
+	margin: 0;
+}
 .top_section{
 	position: absolute;
-	border: 1px solid black;
-	height: 60px;
+	height: 70px;
 	width: 98%;
 	left: 1%;
 	top: 5px;
+	border-bottom: 1px solid grey;
 }
 
 .bottom_section{
 	position: absolute;
-	border: 1px solid black;
-	height: calc(100% - 75px);
+	height: calc(100% - 85px);
 	width: 98%;
 	left: 1%;
 	bottom: 5px;
@@ -209,9 +224,33 @@ export default defineComponent({
 .buttons{
 	border: 1px solid black;
 	padding: 5px 25px;
-	border-radius: 5px;
+	border-radius: 15px;
 	background: radial-gradient(#00b8d8, #00d9ff);
 }
+
+.bank_item{
+	border-radius: 4px;
+    border: 1px solid black;
+    width: 140px;
+    height: 60px;
+	padding: 5px;
+	display: flex;
+	align-items: center;
+    justify-content: center;
+	flex-direction: column;
+	font-size: 0.9em;
+}
+
+
+
+
+
+
+
+
+
+
+
 
 .user_box{
     position: absolute;
@@ -310,5 +349,6 @@ input{
     background-image: radial-gradient(circle, #880097, #470055);
     border-radius: 15px;
     border: 1px solid black;
+	color: white;
 }
 </style>
