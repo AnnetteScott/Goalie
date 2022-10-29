@@ -1,0 +1,7 @@
+{
+  "name": "goalie",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "vue"
+}
