@@ -2,17 +2,27 @@
 	<ion-page>
 		<ion-content :fullscreen="true">
 			<div class="top_section">
-				<div class="bank_item">
-					<p>Bank</p>
+				<div class="bank_item" @click="showEditBank = !showEditBank">
+					<p>Bank:</p>
 					<p style="font-size: 1rem;font-weight: 600;">${{numberWithCommas(dataBase.saved)}}</p>
 				</div>
-				<div class="buttons" style="position: absolute; right: 0%;top: 0px;" @click="showUserBox = !showUserBox">User</div>
+                <div class="bank_item">
+					<p>Needed:</p>
+					<p style="font-size: 1rem;font-weight: 600;">${{numberWithCommas(dataBase.saved - goalNeeded)}}</p>
+				</div>
+                <span class="material-icons-outlined" style="font-size:40px;" @click="showCreateGoal = !showCreateGoal">add_circle_outline</span>
+                <span class="material-icons-outlined" style="font-size: 40px;" @click="showUserBox = !showUserBox">account_circle</span>
 			</div>
 			<div class="bottom_section">
-				<div class="buttons" style="position: absolute; right: 0%;top: 0px;" @click="showUserBox = !showUserBox">Add Goal</div>
 				<div>
-					<div v-for="(contents, goalID) of dataBase.goals" :key="goalID">
-
+					<div v-for="(contents, goalID) of dataBase.goals" :key="goalID" class="goal_item">
+                        <div style="display:flex; align-items: center;flex-direction: column;">
+                            <h1>{{contents.name}}</h1>
+                            <p style="font-size: 0.8em">Needed: ${{numberWithCommas(contents.amount)}}</p>
+                        </div>
+                        <div class="goal_item_bar" 
+                        :style="{width: `${(Math.min(100 * Math.abs(contents.progress / contents.amount), 100))}%`}">
+                        ${{numberWithCommas(contents.progress)}}</div>
 					</div>
 				</div>
 			</div>
@@ -54,6 +64,20 @@
 					</div>
 				</template>
 			</div>
+            <div v-if="showEditBank" class="user_box">
+                <div class="user_input">
+                    <input type="number" placeholder="Bank Amount" required v-model="dataBase.saved">
+                    <input type="button" value="Save" @click="addToBank()">
+                </div>
+            </div>
+            <div v-if="showCreateGoal" class="user_box">
+                <div class="user_input">
+                    <input type="text" placeholder="Name" required v-model="goalName">
+                    <input type="number" placeholder="Goal Amount" required v-model="goalAmount">
+                    <input type="number" placeholder="Currently Saved" required v-model="goalProgress">
+                    <input type="button" value="Save" @click="addGoal()">
+                </div>
+            </div>
 		</ion-content>
 	</ion-page>
 </template>
@@ -63,7 +87,7 @@ import { defineComponent } from 'vue';
 import { IonContent, IonPage } from '@ionic/vue';
 import { initializeApp } from "firebase/app";
 import { UserData } from "@/types"
-import { onAuthStateChanged, Unsubscribe, User, getAuth, createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { onAuthStateChanged, Unsubscribe, User, getAuth, createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword, signOut, Auth } from "firebase/auth";
 import { getFirestore, doc, setDoc, updateDoc, deleteField, arrayUnion, arrayRemove, onSnapshot } from "firebase/firestore";
 const firebaseConfig = {
 	apiKey: "AIzaSyBQoRcJvWt7rw-Ds7XjnNLC0dKBGLmWofA",
@@ -88,13 +112,20 @@ export default defineComponent({
 			dataBase: {} as UserData,
 			showUserBox: false,
 			userSignIn: false,
+			showEditBank: false,
+			showCreateGoal: false,
+            goalNeeded: 0,
 			SignType: '',
 			User: {} as User,
 			userName: 'Netty',
-			userEmail: 'nett@annette.co.nz',
-			userPassword: 'HelloThere',
-			userPasswordConfirm: 'HelloThere',
+			userEmail: '',
+			userPassword: '',
+			userPasswordConfirm: '',
 			passwordSetting: 'password',
+            currentUser: {} as User,
+            goalName: '',
+            goalAmount: '',
+            goalProgress: '',
 		}
 	},
 	mounted(){
@@ -120,61 +151,59 @@ export default defineComponent({
 				}
 			});
 		},
-		watchDataBase(){
+		async watchDataBase(){
 			if(auth.currentUser != null){
 				const uid = auth.currentUser.uid
-				onSnapshot(doc(db, "data", uid), (doc) => {
+				onSnapshot(doc(db, "data", uid), async (doc) => {
 					// @ts-expect-error: It's just a thing
 					this.dataBase = doc.data()
+                    this.calcNeededAmount()
 					console.log(doc.data())
 				});
+                this.currentUser = auth.currentUser as User
 			}
 		},
 		async userAction(){
-			if(this.SignType == 'SignIn'){
-				signInWithEmailAndPassword(auth, this.userEmail, this.userPassword)
-				.then((userCredential) => {
-					this.User = userCredential.user;
-				})
-				.catch((error) => {
-					//const errorCode = error.code;
-					const errorMessage = error.message;
-					console.log(errorMessage)
-				});
-				this.showUserBox = false
-			}
-			if(this.SignType == 'CreateUser'){
-				if(this.userPassword == this.userPasswordConfirm){
-					try {
-						const userCredential = await createUserWithEmailAndPassword(auth, this.userEmail, this.userPassword)
-						this.User = userCredential.user;
-						await this.updateDisplayName()
-						if(auth.currentUser != null){
-							const uid = auth.currentUser.uid
-							if(uid != undefined){
-								try {
-									await setDoc(doc(db, `data/${uid}`), {
-										...{saved: 0, goals: {}}
-									});
-								} catch (error) {
-									console.log(error)    
-								}
-							}
-						}
-					} catch (error) {
-						console.log(error)
-					}
-					this.showUserBox = false
-				}else {
-					let x = document.getElementById("snackbar");
-					if(x != null)
-					x.className = "show";
-					setTimeout(function(){ 
-						if(x != null)
-						x.className = x.className.replace("show", ""); 
-					}, 3000);
-				}   
-			}
+            try {
+                if(this.SignType == 'SignIn'){
+                    signInWithEmailAndPassword(auth, this.userEmail, this.userPassword)
+                    .then((userCredential) => {
+                        this.User = userCredential.user;
+                    })
+                    .catch((error) => {
+                        //const errorCode = error.code;
+                        const errorMessage = error.message;
+                        console.log(errorMessage)
+                    });
+                    this.showUserBox = false
+                }
+                if(this.SignType == 'CreateUser'){
+                    if(this.userPassword == this.userPasswordConfirm){
+                        const userCredential = await createUserWithEmailAndPassword(auth, this.userEmail, this.userPassword)
+                        this.User = userCredential.user;
+                        await this.updateDisplayName()
+                        if(auth.currentUser != null){
+                            const uid = auth.currentUser.uid
+                            if(uid != undefined){
+                                await setDoc(doc(db, `data/${uid}`), {
+                                    ...{saved: 0, goals: {}}
+                                });
+                            }
+                        }
+                        this.showUserBox = false
+                    }else {
+                        let x = document.getElementById("snackbar");
+                        if(x != null)
+                        x.className = "show";
+                        setTimeout(function(){ 
+                            if(x != null)
+                            x.className = x.className.replace("show", ""); 
+                        }, 3000);
+                    }   
+                }
+            } catch (error) {
+                console.log(error)
+            }
 		},
 		async signOutUser(){
 			await signOut(auth).then(() => {
@@ -194,9 +223,54 @@ export default defineComponent({
 			});
 		},
 		numberWithCommas(num: string | number) {
-			num = `${num}`
-			return ((parseFloat(num).toFixed(2)).replace(/\B(?<!\.\d*)(?=(\d{3})+(?!\d))/g, ","));
+			num = parseFloat(`${num}`).toFixed(2)
+			return (parseFloat(num).toLocaleString());
 		},
+        async addToBank(){
+            const uid = this.currentUser.uid
+            const docRef = doc(db, "data", uid);
+            await updateDoc(docRef, {
+                saved: this.dataBase.saved
+            });
+            this.showEditBank = false
+        },
+        async addGoal(){
+            if(this.goalAmount == '' || this.goalAmount == '' || this.goalProgress == ''){
+                return
+            }
+            const goalID = this.generateID(this.dataBase)
+            const uid = this.currentUser.uid
+            const docRef = doc(db, "data", uid);
+            await updateDoc(docRef, {
+                [`goals.${goalID}`]: {name: this.goalName, amount: this.goalAmount, progress: this.goalProgress}
+            });
+            this.showEditBank = false
+        },
+        generateID(check = {}, length = 8){
+            if(length > 120){
+                length = 120
+            }
+            const characters ='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let result = '';
+            let is_duplicate = true;
+            while(is_duplicate){
+                //Generate an ID.
+                for ( let i = 0; i < length; i++ ) {
+                    result += characters.charAt(Math.floor(Math.random() * characters.length));
+                }
+                //Check if it already exists. If so, generate again. If not, continue.
+                if(typeof ([result, result, result, result, result, result, result, result, result, result, result, result].reduce((check: any, level) => check && check[level], check)) == 'undefined'){
+                    is_duplicate = false;
+                }
+            }
+            return result;
+        },
+        calcNeededAmount(){
+            this.goalNeeded = 0
+            for(const [goalID, contents] of Object.entries(this.dataBase.goals)){
+                this.goalNeeded += contents.amount
+            }
+        }
 	},
 });
 </script>
@@ -205,13 +279,18 @@ export default defineComponent({
 p{
 	margin: 0;
 }
+h1{
+	margin: 0;
+}
 .top_section{
 	position: absolute;
-	height: 70px;
+	height: 50px;
 	width: 98%;
 	left: 1%;
 	top: 5px;
 	border-bottom: 1px solid grey;
+    display: flex;
+    justify-content: space-between;
 }
 
 .bottom_section{
@@ -221,31 +300,46 @@ p{
 	left: 1%;
 	bottom: 5px;
 }
-.buttons{
-	border: 1px solid black;
-	padding: 5px 25px;
-	border-radius: 15px;
-	background: radial-gradient(#00b8d8, #00d9ff);
-}
 
 .bank_item{
-	border-radius: 4px;
-    border: 1px solid black;
-    width: 140px;
-    height: 60px;
-	padding: 5px;
-	display: flex;
-	align-items: center;
-    justify-content: center;
-	flex-direction: column;
-	font-size: 0.9em;
+    border-radius: 4px;
+    height: 40px;
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    font-size: 0.9em;
 }
 
+.user_input{
+    border: 1px solid black;
+    width: 100%;
+    border-radius: 15px;
+    display: flex;
+    padding: 20px;
+    flex-direction: column;
+    gap: 17px;
+    align-items: center;
+    background: radial-gradient(#00b8d8, #00d9ff);
+}
 
+.goal_item{
+    border: 1px solid black;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    padding: 5px;
+    min-height: 50px;
+}
 
-
-
-
+.goal_item_bar{
+    padding-left: 7px;
+    height: 20px;
+    background-color: #53b700;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+}
 
 
 

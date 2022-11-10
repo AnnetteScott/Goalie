@@ -4,7 +4,7 @@ export interface UserData {
         [key: string]: {
             name: string,
             amount: number,
-            saved: number
+            progress: number
         }
     }
 }

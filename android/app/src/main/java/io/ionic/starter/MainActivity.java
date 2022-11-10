@@ -1,4 +1,4 @@
-package io.ionic.starter;
+package com.annette.goalie;
 
 import com.getcapacitor.BridgeActivity;
 
