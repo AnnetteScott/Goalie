@@ -1,4 +1,4 @@
-package com.annette.goalie;
+package com.annette.Goalie;
 
 import com.getcapacitor.BridgeActivity;
 
